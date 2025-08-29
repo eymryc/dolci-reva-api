@@ -1,13 +1,11 @@
 services:
-  web:
-    image: nginx:latest # Using the default Nginx image with custom configuration.
+  nginx:
+    container_name: nginx
+    image: nginx:latest
     volumes:
-      # Mount the application code for live updates
       - ./:/var/www
-      # Mount the Nginx configuration file
       - ./docker/development/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
-      # Map port 80 inside the container to the port specified by 'NGINX_PORT' on the host machine
       - "80:80"
     environment:
       - NGINX_HOST=localhost
@@ -15,10 +13,10 @@ services:
       - laravel-development
     depends_on:
       php-fpm:
-        condition: service_started # Wait for php-fpm to start
+        condition: service_started
 
   php-fpm:
-    # For the php-fpm service, we will use our common PHP-FPM Dockerfile with the development target
+    container_name: php-fpm
     build:
       context: .
       dockerfile: ./docker/common/php-fpm/Dockerfile
@@ -33,22 +31,18 @@ services:
         XDEBUG_LOG: /dev/stdout
         XDEBUG_LOG_LEVEL: 0
     env_file:
-      # Load the environment variables from the Laravel application
       - .env
     user: "${UID:-1000}:${GID:-1000}"
     volumes:
-      # Mount the application code for live updates
       - ./:/var/www
     networks:
       - laravel-development
     depends_on:
-      # postgres:
-        # condition: service_started # Wait for postgres to start
       mysql:
-        condition: service_started # Wait for mysql to start
+        condition: service_started
 
   workspace:
-    # For the workspace service, we will also create a custom image to install and setup all the necessary stuff.
+    container_name: workspace
     build:
       context: .
       dockerfile: ./docker/development/workspace/Dockerfile
@@ -61,8 +55,8 @@ services:
         XDEBUG_IDE_KEY: ${XDEBUG_IDE_KEY:-DOCKER}
         XDEBUG_LOG: /dev/stdout
         XDEBUG_LOG_LEVEL: 0
-    tty: true # Enables an interactive terminal
-    stdin_open: true # Keeps standard input open for 'docker exec'
+    tty: true
+    stdin_open: true
     env_file:
       - .env
     volumes:
@@ -70,36 +64,21 @@ services:
     networks:
       - laravel-development
 
-  # postgres:
-  #   image: postgres:16
-  #   ports:
-  #     - "${POSTGRES_PORT:-5432}:5432"
-  #   environment:
-  #     - POSTGRES_DB=app
-  #     - POSTGRES_USER=laravel
-  #     - POSTGRES_PASSWORD=secret
-  #   volumes:
-  #     - postgres-data-development:/var/lib/postgresql/data
-  #   networks:
-  #     - laravel-development
-
-  # MySQL service for the application
   mysql:
+    container_name: mysql
     image: mysql:8.0
     ports:
       - "${MYSQL_PORT:-3306}:3306"
     environment:
       - MYSQL_ROOT_PASSWORD=root
       - MYSQL_DATABASE=sgh24_database
-      # - MYSQL_USER=root
-      # - MYSQL_PASSWORD=root
     volumes:
       - mysql-data-development:/var/lib/mysql
     networks:
       - laravel-development
 
-  # phpMyAdmin service for managing MySQL databases
   phpmyadmin:
+    container_name: phpmyadmin
     image: phpmyadmin:latest
     ports:
       - "${PHPMYADMIN_PORT:-8080}:80"
@@ -111,19 +90,12 @@ services:
       - laravel-development
     depends_on:
       mysql:
-        condition: service_started # Wait for mysql to start
+        condition: service_started
 
-# Redis service for caching and session management
-  # redis:
-  #   image: redis:alpine
-  #   networks:
-  #     - laravel-development
-
-# networks section to define the custom network for the services
 networks:
   laravel-development:
+    name: network
 
-# volumes section to define the named volumes for persistent data storage
 volumes:
-  # postgres-data-development:
   mysql-data-development:
+    name: mysql-data
