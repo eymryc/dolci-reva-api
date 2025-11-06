@@ -3,6 +3,7 @@
 namespace App\Repositories;
 
 use App\Models\User;
+use App\Models\BusinessType;
 
 class UserRepository
 {
@@ -38,7 +39,7 @@ class UserRepository
      */
     public function getAllWithPagination(int $perPage = 15)
     {
-        return $this->user->with('categories')->paginate($perPage);
+        return $this->user->with('businessTypes')->paginate($perPage);
     }
 
     /**
@@ -69,9 +70,13 @@ class UserRepository
         // Création du user
         $user = User::create($data);
 
-        // Attacher les catégories si définies
+        // Attacher les business types si définis et s'ils existent
         if (!empty($services)) {
-            $user->categories()->attach($services);
+            // Vérifier que les business types existent avant de les attacher
+            $existingBusinessTypes = \App\Models\BusinessType::whereIn('id', $services)->pluck('id')->toArray();
+            if (!empty($existingBusinessTypes)) {
+                $user->businessTypes()->attach($existingBusinessTypes);
+            }
         }
 
         // return $user;
@@ -94,14 +99,16 @@ class UserRepository
 
         $user = $this->user->find($id);
 
-        $user = $this->user->find($id);
-
         if ($user) {
             $user->update($data);
 
-            // Attacher les catégories si définies
+            // Attacher les business types si définis et s'ils existent
             if (!empty($services)) {
-                $user->categories()->attach($services);
+                // Vérifier que les business types existent avant de les attacher
+                $existingBusinessTypes = BusinessType::whereIn('id', $services)->pluck('id')->toArray();
+                if (!empty($existingBusinessTypes)) {
+                    $user->businessTypes()->sync($existingBusinessTypes);
+                }
             }
         }
 

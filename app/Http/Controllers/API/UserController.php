@@ -5,9 +5,15 @@ namespace App\Http\Controllers\API;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UserRequest;
 use App\Http\Resources\UserResource;
+use App\Models\User;
 use App\Services\UserService;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
+use OpenApi\Annotations as OA;
 
+/**
+ * @OA\Tag(name="Users")
+ */
 class UserController extends Controller
 {
     /**
@@ -28,9 +34,28 @@ class UserController extends Controller
     }
 
     /**
-     * Get a paginated list of users.
-     *
-     * @return \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+     * @OA\Get(
+     *     path="/users",
+     *     summary="Liste des utilisateurs",
+     *     description="Récupère la liste de tous les utilisateurs",
+     *     operationId="getUsers",
+     *     tags={"Users"},
+     *     security={{"bearerAuth": {}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Liste des utilisateurs récupérée avec succès",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="data", type="array",
+     *                 @OA\Items(ref="#/components/schemas/User")
+     *             )
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Non authentifié",
+     *         @OA\JsonContent(ref="#/components/schemas/Error")
+     *     )
+     * )
      */
     public function index(): \Illuminate\Http\Resources\Json\AnonymousResourceCollection
     {
@@ -38,22 +63,66 @@ class UserController extends Controller
     }
 
     /**
-     * Store a newly created user in storage.
-     *
-     * @param UserRequest $request
-     * @return UserResource|\Illuminate\Http\JsonResponse
+     * @OA\Post(
+     *     path="/register",
+     *     summary="Inscription utilisateur",
+     *     description="Crée un nouveau compte utilisateur",
+     *     operationId="register",
+     *     tags={"Authentication", "Users"},
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             required={"first_name", "last_name", "email", "password", "password_confirmation", "type"},
+     *             @OA\Property(property="first_name", type="string", example="John"),
+     *             @OA\Property(property="last_name", type="string", example="Doe"),
+     *             @OA\Property(property="email", type="string", format="email", example="john@example.com"),
+     *             @OA\Property(property="phone", type="string", example="+33123456789"),
+     *             @OA\Property(property="password", type="string", format="password", example="password123"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", example="password123"),
+     *             @OA\Property(property="type", type="string", enum={"CUSTOMER", "OWNER", "ADMIN"}, example="CUSTOMER")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=201,
+     *         description="Compte créé avec succès",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="integer", example=201),
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Account created successfully"),
+     *             @OA\Property(property="data", ref="#/components/schemas/User")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Erreur de validation",
+     *         @OA\JsonContent(ref="#/components/schemas/ValidationError")
+     *     ),
+     *     @OA\Response(
+     *         response=500,
+     *         description="Erreur serveur",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="error", type="string", example="Internal server error.")
+     *         )
+     *     )
+     * )
      */
     public function store(UserRequest $request): UserResource|\Illuminate\Http\JsonResponse
     {
         try {
+            /** @var \App\Models\User $user */
             $user = $this->userService->save($request->validated());
+            
+            // Send email verification notification
+            $user->sendEmailVerificationNotification();
+            
             $data = new UserResource($user);
 
             return response()->json([
                 'status'  => Response::HTTP_CREATED,
                 'success' => true,
-                'message' => 'Account created successfully',
+                'message' => 'Account created successfully. Please check your email to verify your account.',
                 'data'    => $data,
+                'email_verified' => false,
             ], Response::HTTP_CREATED);
 
         } catch (\Exception $exception) {
@@ -66,10 +135,36 @@ class UserController extends Controller
     }
 
     /**
-     * Display the specified user.
-     *
-     * @param int $id
-     * @return UserResource
+     * @OA\Get(
+     *     path="/users/{id}",
+     *     summary="Afficher un utilisateur",
+     *     description="Récupère les détails d'un utilisateur spécifique",
+     *     operationId="getUser",
+     *     tags={"Users"},
+     *     security={{"bearerAuth": {}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         description="ID de l'utilisateur",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Utilisateur récupéré avec succès",
+     *         @OA\JsonContent(ref="#/components/schemas/User")
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Utilisateur non trouvé",
+     *         @OA\JsonContent(ref="#/components/schemas/Error")
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Non authentifié",
+     *         @OA\JsonContent(ref="#/components/schemas/Error")
+     *     )
+     * )
      */
     public function show(int $id): UserResource
     {
@@ -77,11 +172,62 @@ class UserController extends Controller
     }
 
     /**
-     * Update the specified user.
-     *
-     * @param UserRequest $request
-     * @param int $id
-     * @return UserResource|\Illuminate\Http\JsonResponse
+     * @OA\Put(
+     *     path="/users/{id}",
+     *     summary="Modifier un utilisateur",
+     *     description="Met à jour un utilisateur existant",
+     *     operationId="updateUser",
+     *     tags={"Users"},
+     *     security={{"bearerAuth": {}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         description="ID de l'utilisateur à modifier",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\RequestBody(
+     *         required=true,
+     *         @OA\JsonContent(
+     *             @OA\Property(property="first_name", type="string", example="John"),
+     *             @OA\Property(property="last_name", type="string", example="Doe"),
+     *             @OA\Property(property="email", type="string", format="email", example="john@example.com"),
+     *             @OA\Property(property="phone", type="string", example="+33123456789"),
+     *             @OA\Property(property="password", type="string", format="password", example="newpassword123"),
+     *             @OA\Property(property="password_confirmation", type="string", format="password", example="newpassword123"),
+     *             @OA\Property(property="type", type="string", enum={"CUSTOMER", "OWNER", "ADMIN"}, example="CUSTOMER")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Utilisateur modifié avec succès",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="integer", example=200),
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Account updated successfully"),
+     *             @OA\Property(property="data", ref="#/components/schemas/User")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Utilisateur non trouvé",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="integer", example=404),
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="User not found")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=422,
+     *         description="Erreur de validation",
+     *         @OA\JsonContent(ref="#/components/schemas/ValidationError")
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Non authentifié",
+     *         @OA\JsonContent(ref="#/components/schemas/Error")
+     *     )
+     * )
      */
     public function update(UserRequest $request, int $id): UserResource|\Illuminate\Http\JsonResponse
     {
@@ -115,10 +261,44 @@ class UserController extends Controller
     }
 
     /**
-     * Remove the specified user from storage.
-     *
-     * @param int $id
-     * @return \Illuminate\Http\JsonResponse
+     * @OA\Delete(
+     *     path="/users/{id}",
+     *     summary="Supprimer un utilisateur",
+     *     description="Supprime un utilisateur existant",
+     *     operationId="deleteUser",
+     *     tags={"Users"},
+     *     security={{"bearerAuth": {}}},
+     *     @OA\Parameter(
+     *         name="id",
+     *         in="path",
+     *         required=true,
+     *         description="ID de l'utilisateur à supprimer",
+     *         @OA\Schema(type="integer")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Utilisateur supprimé avec succès",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="integer", example=200),
+     *             @OA\Property(property="success", type="boolean", example=true),
+     *             @OA\Property(property="message", type="string", example="Deleted successfully")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="Utilisateur non trouvé",
+     *         @OA\JsonContent(
+     *             @OA\Property(property="status", type="integer", example=404),
+     *             @OA\Property(property="success", type="boolean", example=false),
+     *             @OA\Property(property="message", type="string", example="User not found")
+     *         )
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Non authentifié",
+     *         @OA\JsonContent(ref="#/components/schemas/Error")
+     *     )
+     * )
      */
     public function destroy(int $id): \Illuminate\Http\JsonResponse
     {
@@ -146,5 +326,36 @@ class UserController extends Controller
                 'error' => 'Internal server error.'
             ], Response::HTTP_INTERNAL_SERVER_ERROR);
         }
+    }
+
+
+
+    /**
+     * @OA\Get(
+     *     path="/profile",
+     *     summary="Afficher le profil utilisateur",
+     *     description="Récupère les détails du profil utilisateur",
+     *     operationId="getProfile",
+     *     tags={"Users"},
+     *     security={{"bearerAuth": {}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Profil utilisateur récupéré avec succès",
+     *         @OA\JsonContent(ref="#/components/schemas/User")
+     *     ),
+     *     @OA\Response(
+     *         response=401,
+     *         description="Non authentifié",
+     *         @OA\JsonContent(ref="#/components/schemas/Error")
+     *     )
+     * )
+     */
+    public function getProfile(): UserResource
+    {
+        /** @var User $user */
+        $user = Auth::user();
+
+        // Retourne le profil utilisateur avec les business types
+        return UserResource::make($user->load('businessTypes', 'wallet'));
     }
 }

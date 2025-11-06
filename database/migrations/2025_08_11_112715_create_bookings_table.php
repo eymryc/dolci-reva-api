@@ -14,21 +14,20 @@ return new class extends Migration
         Schema::create('bookings', function (Blueprint $table) {
             $table->id();
 
-            // Clé étrangère vers l'utilisateur
-            // $table->foreignId('user_id')->constrained('users');
-
+            // Clés étrangères
             $table->foreignId('customer_id')->constrained('users')->onDelete('cascade'); // Celui qui fait la réservation
             $table->foreignId('owner_id')->constrained('users')->onDelete('cascade'); // Celui qui possède l'élément réservé
 
             // Relation polymorphique
-            // $table->string('item_type'); // 'PROPERTY', 'ROOM', 'SPACE', 'ACTIVITY'
-            // $table->unsignedBigInteger('item_id');
             $table->morphs('bookable');
-
 
             // Période de réservation
             $table->dateTime('start_date');
             $table->dateTime('end_date');
+
+            // Informations de réservation
+            $table->integer('guests')->default(1); // Nombre d'invités
+            $table->string('booking_reference', 20)->unique(); // Référence unique de réservation
 
             // Informations financières
             $table->decimal('total_price', 10, 2);
@@ -37,26 +36,35 @@ return new class extends Migration
 
             // Statuts
             $table->enum('status', [
-                'CONFIRME',
-                'ANNULE',
-                'EN_ATTENTE'
+                'EN_ATTENTE',    // En attente de confirmation
+                'CONFIRME',      // Confirmé
+                'ANNULE',        // Annulé
+                'COMPLETE',      // Terminé
+                'NO_SHOW'        // Absent
             ])->default('EN_ATTENTE');
 
             $table->enum('payment_status', [
-                'PAYE',
-                'REMBOURSE',
-                'EN_ATTENTE'
+                'EN_ATTENTE',    // En attente de paiement
+                'PAYE',          // Payé
+                'PARTIELLEMENT_PAYE', // Partiellement payé
+                'REMBOURSE',     // Remboursé
+                'ECHEC'          // Échec de paiement
             ])->default('EN_ATTENTE');
 
             // Informations supplémentaires
-            $table->text('notes')->nullable();
-            $table->text('cancellation_reason')->nullable();
+            $table->text('notes')->nullable(); // Notes internes
+            $table->text('cancellation_reason')->nullable(); // Raison d'annulation
+            $table->timestamp('cancelled_at')->nullable(); // Date d'annulation
+            $table->timestamp('confirmed_at')->nullable(); // Date de confirmation
 
-
-
-            // Index
+            // Index pour optimiser les requêtes
             $table->index('start_date');
             $table->index('end_date');
+            $table->index('status');
+            $table->index('payment_status');
+            $table->index('customer_id');
+            $table->index('owner_id');
+            // Note: L'index sur bookable_type et bookable_id est automatiquement créé par morphs()
 
             $table->timestamps();
             $table->softDeletes();

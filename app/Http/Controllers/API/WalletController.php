@@ -35,7 +35,18 @@ class WalletController extends Controller
     public function store(WalletRequest $request): WalletResource|\Illuminate\Http\JsonResponse
     {
         try {
-            return new WalletResource($this->walletService->save($request->validated()));
+            $data = new WalletResource($this->walletService->save($request->validated()));
+
+            // Set response
+            $response = response()->json([
+                'status'    => Response::HTTP_CREATED,
+                'success'   => true,    
+                'message'   => 'Wallet created successfully',
+                'data'      => $data
+            ], Response::HTTP_CREATED);
+
+            // Return the response
+            return $response;
         } catch (\Exception $exception) {
             report($exception);
             return response()->json(['error' => 'There is an error.'], Response::HTTP_INTERNAL_SERVER_ERROR);
@@ -50,7 +61,18 @@ class WalletController extends Controller
     public function update(WalletRequest $request, int $id): WalletResource|\Illuminate\Http\JsonResponse
     {
         try {
-            return new WalletResource($this->walletService->update($request->validated(), $id));
+            $data = new WalletResource($this->walletService->update($request->validated(), $id));
+            
+            // Set response
+            $response = response()->json([
+                'status'    => Response::HTTP_OK,
+                'success'   => true,
+                'message'   => 'Wallet updated successfully',
+                'data'      => $data
+            ], Response::HTTP_OK);
+
+            // Return the response
+            return $response;
         } catch (\Exception $exception) {
             report($exception);
             return response()->json(['error' => 'There is an error.'], Response::HTTP_INTERNAL_SERVER_ERROR);
@@ -61,7 +83,11 @@ class WalletController extends Controller
     {
         try {
             $this->walletService->deleteById($id);
-            return response()->json(['message' => 'Deleted successfully'], Response::HTTP_OK);
+            return response()->json([
+                'status' => Response::HTTP_OK,
+                'success' => true,
+                'message' => 'Deleted successfully'
+            ], Response::HTTP_OK);
         } catch (\Exception $exception) {
             report($exception);
             return response()->json(['error' => 'There is an error.'], Response::HTTP_INTERNAL_SERVER_ERROR);

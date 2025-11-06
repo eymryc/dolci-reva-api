@@ -35,7 +35,18 @@ class WalletTransactionController extends Controller
     public function store(WalletTransactionRequest $request): WalletTransactionResource|\Illuminate\Http\JsonResponse
     {
         try {
-            return new WalletTransactionResource($this->walletTransactionService->save($request->validated()));
+            $data = new WalletTransactionResource($this->walletTransactionService->save($request->validated()));
+
+            // Set response
+            $response = response()->json([
+                'status'    => Response::HTTP_CREATED,
+                'success'   => true,    
+                'message'   => 'Wallet transaction created successfully',
+                'data'      => $data
+            ], Response::HTTP_CREATED);
+
+            // Return the response
+            return $response;
         } catch (\Exception $exception) {
             report($exception);
             return response()->json(['error' => 'There is an error.'], Response::HTTP_INTERNAL_SERVER_ERROR);
@@ -50,7 +61,18 @@ class WalletTransactionController extends Controller
     public function update(WalletTransactionRequest $request, int $id): WalletTransactionResource|\Illuminate\Http\JsonResponse
     {
         try {
-            return new WalletTransactionResource($this->walletTransactionService->update($request->validated(), $id));
+            $data = new WalletTransactionResource($this->walletTransactionService->update($request->validated(), $id));
+            
+            // Set response
+            $response = response()->json([
+                'status'    => Response::HTTP_OK,
+                'success'   => true,
+                'message'   => 'Wallet transaction updated successfully',
+                'data'      => $data
+            ], Response::HTTP_OK);
+
+            // Return the response
+            return $response;
         } catch (\Exception $exception) {
             report($exception);
             return response()->json(['error' => 'There is an error.'], Response::HTTP_INTERNAL_SERVER_ERROR);
@@ -61,7 +83,11 @@ class WalletTransactionController extends Controller
     {
         try {
             $this->walletTransactionService->deleteById($id);
-            return response()->json(['message' => 'Deleted successfully'], Response::HTTP_OK);
+            return response()->json([
+                'status' => Response::HTTP_OK,
+                'success' => true,
+                'message' => 'Deleted successfully'
+            ], Response::HTTP_OK);
         } catch (\Exception $exception) {
             report($exception);
             return response()->json(['error' => 'There is an error.'], Response::HTTP_INTERNAL_SERVER_ERROR);

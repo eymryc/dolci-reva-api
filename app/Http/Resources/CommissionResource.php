@@ -10,9 +10,10 @@ class CommissionResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'commission' => $this->commission,
-            'is_active' => $this->is_active,
-            'deleted_at' => $this->deleted_at,
+            'id'            => $this->id,
+            'commission'    => $this->commission,
+            'is_active'     => $this->is_active,
+            'deleted_at'    => $this->deleted_at,
         ];
     }
 }

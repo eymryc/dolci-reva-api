@@ -9,6 +9,7 @@ class WalletResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+
         return [
             'user_id' => $this->user_id,
             'balance' => $this->balance,

@@ -3,7 +3,8 @@
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
-use App\Http\Resources\CategoryResource;
+use App\Http\Resources\BusinessTypeResource;
+use App\Http\Resources\WalletResource;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class UserResource extends JsonResource
@@ -17,7 +18,8 @@ class UserResource extends JsonResource
             'phone'         => $this->phone,
             'email'         => $this->email,
             'type'          => $this->type,
-            'categories'    => CategoryResource::collection($this->whenLoaded('categories')),
+            'businessTypes' => BusinessTypeResource::collection($this->whenLoaded('businessTypes')),
+            'wallet'        => new WalletResource($this->whenLoaded('wallet')),
         ];
     }
 }

@@ -60,7 +60,14 @@ class CommissionRepository
      * @return Commission
      */
     public function save(array $data)
-    {
+    {   
+        // Si la nouvelle commission est active, désactiver toutes les autres
+        if (isset($data['is_active']) && $data['is_active'] === true) {
+            Commission::where('is_active', true)
+                ->whereNull('deleted_at')
+                ->update(['is_active' => false]);
+        }
+        
         return Commission::create($data);
     }
 
@@ -73,6 +80,15 @@ class CommissionRepository
     public function update(array $data, int $id)
     {
         $commission = $this->commission->find($id);
+        
+        // Si cette commission est activée, désactiver toutes les autres
+        if (isset($data['is_active']) && $data['is_active'] === true) {
+            Commission::where('is_active', true)
+                ->whereNull('deleted_at')
+                ->where('id', '!=', $id) // Exclure la commission actuelle
+                ->update(['is_active' => false]);
+        }
+        
         $commission->update($data);
         return $commission;
     }
@@ -97,6 +113,6 @@ class CommissionRepository
      */
     public function getLastCommission()
     {
-        return $this->commission->where("deleted_at", null)->latest()->first();
+        return $this->commission->where("deleted_at", null)->where("is_active",true)->latest()->first();
     }
 }

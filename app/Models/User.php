@@ -2,15 +2,16 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use App\Notifications\VerifyEmailNotification;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, SoftDeletes;
@@ -52,13 +53,6 @@ class User extends Authenticatable
         ];
     }
 
-    /**
-     * Relation avec le modèle Adress
-     */
-    public function addresses(): HasMany
-    {
-        return $this->hasMany(Address::class);
-    }
 
     /**
      * The amenities that belong to the user.
@@ -70,11 +64,11 @@ class User extends Authenticatable
 
     
     /**
-     * The categories that belong to the user.
+     * The business types that belong to the user.
      */
-    public function categories()
+    public function businessTypes()
     {
-        return $this->belongsToMany(Category::class);
+        return $this->belongsToMany(BusinessType::class, 'business_type_user');
     }
 
     /**
@@ -93,5 +87,29 @@ class User extends Authenticatable
         return $this->hasMany(Withdrawal::class); 
     }
 
-    
+    /**
+     * Get the user's opinions.
+     */
+    public function opinions()
+    {
+        return $this->hasMany(Opinion::class);
+    }
+
+    /**
+     * Check if the user is an admin.
+     */
+    public function isAdmin(): bool
+    {
+        return in_array($this->type, ['ADMIN', 'SUPER_ADMIN']);
+    }
+
+    /**
+     * Send the email verification notification.
+     *
+     * @return void
+     */
+    public function sendEmailVerificationNotification()
+    {
+        $this->notify(new VerifyEmailNotification());
+    }
 }

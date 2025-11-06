@@ -47,9 +47,13 @@ class UserSeeder extends Seeder
             // Création du user
             $user = User::create($userData);
 
-            // Attacher les catégories si définies
+            // Attacher les catégories si définies et qu'elles existent
             if (!empty($services)) {
-                $user->categories()->attach($services);
+                // Vérifier que les catégories existent avant de les attacher
+                $existingBusinessTypes = \App\Models\BusinessType::whereIn('id', $services)->pluck('id')->toArray();
+                if (!empty($existingBusinessTypes)) {
+                    $user->businessTypes()->attach($existingBusinessTypes);
+                }
             }
         }
     }

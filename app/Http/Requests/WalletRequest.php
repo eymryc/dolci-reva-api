@@ -26,7 +26,7 @@ class WalletRequest extends FormRequest
      * @param Validator $validator
      * @throws HttpResponseException
      */
-    protected function failedValidation(Validator $validator)
+    protected function failedValidation(\Illuminate\Contracts\Validation\Validator $validator)
     {
         throw new HttpResponseException(response()->json([
             'success'   => false,
