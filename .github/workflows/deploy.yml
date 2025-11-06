@@ -102,39 +102,73 @@ jobs:
           echo "$DEPLOY_KEY" > deploy_key
           chmod 600 deploy_key
           
+          # Tester la connexion SSH
+          echo "🔍 Testing SSH connection..."
+          ssh -i deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=10 $DEPLOY_USER@$DEPLOY_HOST "echo 'SSH connection successful'"
+          
           # Créer le répertoire de déploiement si nécessaire
+          echo "📁 Creating deployment directory..."
           ssh -i deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "mkdir -p $DEPLOY_PATH"
           
           # Transférer le package de déploiement
+          echo "📦 Uploading deployment package..."
           scp -i deploy_key -o StrictHostKeyChecking=no deployment.tar.gz $DEPLOY_USER@$DEPLOY_HOST:/tmp/deployment.tar.gz
           
           # Extraire et déployer sur le serveur
-          ssh -i deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << ENDSSH
-            cd $DEPLOY_PATH
+          echo "🚀 Deploying to server..."
+          ssh -i deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST bash << 'ENDSSH'
+            set -e
+            DEPLOY_PATH="/home/achalivr/public_html/dolci-reva.achalivre-afrique.ci"
+            cd "$DEPLOY_PATH" || exit 1
+            
             # Sauvegarder le .env existant
             if [ -f .env ]; then
-              cp .env .env.backup.\$(date +%Y%m%d_%H%M%S)
+              echo "💾 Backing up .env file..."
+              cp .env .env.backup.$(date +%Y%m%d_%H%M%S)
             fi
-            # Extraire le nouveau code directement dans le répertoire de déploiement
-            tar -xzf /tmp/deployment.tar.gz -C $DEPLOY_PATH --strip-components=0
+            
+            # Extraire le nouveau code
+            echo "📂 Extracting files..."
+            tar -xzf /tmp/deployment.tar.gz -C "$DEPLOY_PATH" --strip-components=0 || {
+              echo "❌ Error extracting files"
+              exit 1
+            }
+            
             # Restaurer le .env si sauvegardé
             if ls .env.backup.* 1> /dev/null 2>&1; then
+              echo "🔄 Restoring .env file..."
               mv .env.backup.* .env
             fi
+            
+            # Vérifier que PHP est disponible
+            if ! command -v php &> /dev/null; then
+              echo "⚠️ PHP not found in PATH, trying /usr/bin/php..."
+              PHP_CMD="/usr/bin/php"
+            else
+              PHP_CMD="php"
+            fi
+            
             # Optimiser Laravel
-            php artisan config:cache || true
-            php artisan route:cache || true
-            php artisan view:cache || true
+            echo "⚡ Optimizing Laravel..."
+            $PHP_CMD artisan config:cache || echo "⚠️ config:cache failed"
+            $PHP_CMD artisan route:cache || echo "⚠️ route:cache failed"
+            $PHP_CMD artisan view:cache || echo "⚠️ view:cache failed"
+            
             # Exécuter les migrations (optionnel - décommentez si nécessaire)
-            # php artisan migrate --force || true
+            # $PHP_CMD artisan migrate --force || echo "⚠️ migrate failed"
+            
             # Nettoyer le cache
-            php artisan cache:clear || true
+            echo "🧹 Clearing cache..."
+            $PHP_CMD artisan cache:clear || echo "⚠️ cache:clear failed"
+            
             # Nettoyer le fichier temporaire
             rm -f /tmp/deployment.tar.gz
+            echo "✅ Deployment completed successfully!"
           ENDSSH
           
           # Nettoyer la clé locale
           rm -f deploy_key
+          echo "🔒 SSH key cleaned up"
       
       - name: Deployment notification
         if: always()
