@@ -1,0 +1,147 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  PHP_VERSION: '8.2'
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'production' }}
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ env.PHP_VERSION }}
+          extensions: mbstring, xml, bcmath, pdo, pdo_mysql, fileinfo, gd, curl, zip, intl, exif
+          coverage: none
+      
+      - name: Get Composer Cache Directory
+        id: composer-cache
+        shell: bash
+        run: |
+          echo "dir=$(composer config cache-files-dir)" >> $GITHUB_OUTPUT
+      
+      - name: Cache Composer dependencies
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+      
+      - name: Install Composer dependencies
+        run: |
+          composer install --prefer-dist --no-progress --no-interaction --optimize-autoloader --no-dev
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install NPM dependencies
+        run: npm ci
+      
+      - name: Build assets
+        run: npm run build
+      
+      - name: Create deployment package
+        run: |
+          mkdir -p deployment
+          tar -czf deployment.tar.gz \
+            --exclude='.git' \
+            --exclude='.github' \
+            --exclude='node_modules' \
+            --exclude='tests' \
+            --exclude='.env*' \
+            --exclude='*.md' \
+            --exclude='phpunit.xml' \
+            --exclude='vite.config.js' \
+            --exclude='package*.json' \
+            --exclude='.gitignore' \
+            .
+      
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deployment-package
+          path: deployment.tar.gz
+          retention-days: 7
+      
+      # Déploiement sur cPanel via SSH
+      - name: Deploy to cPanel server
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_PATH: /home/achalivr/public_html/dolci-reva.achalivre-afrique.ci
+        run: |
+          # Créer le fichier de clé SSH
+          echo "$DEPLOY_KEY" > deploy_key
+          chmod 600 deploy_key
+          
+          # Créer le répertoire de déploiement si nécessaire
+          ssh -i deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST "mkdir -p $DEPLOY_PATH"
+          
+          # Transférer le package de déploiement
+          scp -i deploy_key -o StrictHostKeyChecking=no deployment.tar.gz $DEPLOY_USER@$DEPLOY_HOST:/tmp/deployment.tar.gz
+          
+          # Extraire et déployer sur le serveur
+          ssh -i deploy_key -o StrictHostKeyChecking=no $DEPLOY_USER@$DEPLOY_HOST << ENDSSH
+            cd $DEPLOY_PATH
+            # Sauvegarder le .env existant
+            if [ -f .env ]; then
+              cp .env .env.backup.\$(date +%Y%m%d_%H%M%S)
+            fi
+            # Extraire le nouveau code directement dans le répertoire de déploiement
+            tar -xzf /tmp/deployment.tar.gz -C $DEPLOY_PATH --strip-components=0
+            # Restaurer le .env si sauvegardé
+            if ls .env.backup.* 1> /dev/null 2>&1; then
+              mv .env.backup.* .env
+            fi
+            # Optimiser Laravel
+            php artisan config:cache || true
+            php artisan route:cache || true
+            php artisan view:cache || true
+            # Exécuter les migrations (optionnel - décommentez si nécessaire)
+            # php artisan migrate --force || true
+            # Nettoyer le cache
+            php artisan cache:clear || true
+            # Nettoyer le fichier temporaire
+            rm -f /tmp/deployment.tar.gz
+          ENDSSH
+          
+          # Nettoyer la clé locale
+          rm -f deploy_key
+      
+      - name: Deployment notification
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ Deployment successful!"
+          else
+            echo "❌ Deployment failed!"
+          fi
+
